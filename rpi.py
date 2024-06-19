@@ -5,9 +5,6 @@ import pygame
 from PIL import Image
 import json
 
-# Constants
-
-
 # Initialize pygame
 os.environ['DISPLAY'] = ':0'
 os.environ['XDG_RUNTIME_DIR'] = '/run/user/1000'
@@ -22,7 +19,6 @@ def read_gpio_config(json_file_path):
     with open(json_file_path, 'r') as json_file:
         return json.load(json_file)
 
-
 json_file_path = 'gpio_config.json'
 gpio_config = read_gpio_config(json_file_path)
 
@@ -30,7 +26,7 @@ PULSES_PER_360 = 20
 screens_directory = gpio_config.get('screens_directory', 'screens')
 IDLE_TIMEOUT = gpio_config.get('IDLE_TIMEOUT', 5)
 DEGREES_PER_SECTION = gpio_config.get('DEGREES_PER_SECTION', 30)
-STEPS_PER_SECTION = int(round((PULSES_PER_360 / 360) * DEGREES_PER_SECTION))  # This will be approximately 2
+STEPS_PER_SECTION = int(round((PULSES_PER_360 / 360) * DEGREES_PER_SECTION))
 
 # Initialize components
 leds = [LED(pin) for pin in gpio_config['leds']]
@@ -41,33 +37,25 @@ sw = Button(gpio_config['sw'], pull_up=True)
 # State variables
 value = 0
 previous_clk_state = clk.is_pressed
-encoder_position = 0  # Track the cumulative position of the encoder
+encoder_position = 0
+image_index = 0  # Track the index of the currently displayed image within the directory
 
-def display_image(pin):
+def display_image(pin, index):
     folder_path = os.path.join(screens_directory, str(pin))
-    for file in os.listdir(folder_path):
-        if file.endswith(('png', 'jpg', 'jpeg', 'bmp', 'gif')):
-            image_path = os.path.join(folder_path, file)
-            img = Image.open(image_path)
-            img_width, img_height = img.size
-            screen_width, screen_height = screen.get_size()
-
-            # Calculate the scaling factor to maintain aspect ratio
-            scale = min(screen_width / img_width, screen_height / img_height)
-
-            # Calculate new dimensions while maintaining aspect ratio
-            new_width = int(img_width * scale)
-            new_height = int(img_height * scale)
-            img = img.resize((new_width, new_height), Image.LANCZOS)
-
-            # Convert the image to a pygame surface
-            img_surface = pygame.image.fromstring(img.tobytes(), img.size, img.mode)
-
-            # Calculate position to center the image on the screen
-            x_pos = (screen_width - new_width) // 2
-            y_pos = (screen_height - new_height) // 2
-
-            return img_surface, (x_pos, y_pos)
+    files = [f for f in os.listdir(folder_path) if f.endswith(('png', 'jpg', 'jpeg', 'bmp', 'gif'))]
+    if files:
+        image_path = os.path.join(folder_path, files[index % len(files)])
+        img = Image.open(image_path)
+        img_width, img_height = img.size
+        screen_width, screen_height = screen.get_size()
+        scale = min(screen_width / img_width, screen_height / img_height)
+        new_width = int(img_width * scale)
+        new_height = int(img_height * scale)
+        img = img.resize((new_width, new_height), Image.LANCZOS)
+        img_surface = pygame.image.fromstring(img.tobytes(), img.size, img.mode)
+        x_pos = (screen_width - new_width) // 2
+        y_pos = (screen_height - new_height) // 2
+        return img_surface, (x_pos, y_pos)
     return None, (0, 0)
 def display_idle_image():
     idle_path = os.path.join(screens_directory, 'idle')
@@ -103,30 +91,32 @@ def smooth_transition(new_image, pos):
         pygame.display.update()
         clock.tick(60)
 
-def rotary_changed():
-    global value, previous_clk_state, encoder_position
 
+def rotary_changed():
+    global value, previous_clk_state, encoder_position, image_index
     current_clk_state = clk.is_pressed
     if current_clk_state != previous_clk_state:
-        if not current_clk_state:  # Falling edge of the CLK signal
+        if not current_clk_state:
             if dt.is_pressed:
                 encoder_position += 1
             else:
                 encoder_position -= 1
-
-            # Check if the encoder has moved enough steps to reach the next section
             if abs(encoder_position) >= STEPS_PER_SECTION:
                 increment = 1 if encoder_position > 0 else -1
                 value = (value + increment) % len(gpio_config['leds'])
-                encoder_position = 0  # Reset encoder position after updating
-                update_leds()
-        
+                encoder_position = 0
+                image_index = 0
+                update_display()
         previous_clk_state = current_clk_state
+
 
     if not sw.is_pressed:
         # Handle switch press if needed
         pass
-
+def update_display():
+    img_surface, pos = display_image(gpio_config['leds'][value], image_index)
+    if img_surface:
+        smooth_transition(img_surface, pos)
 def update_leds():
     # First, turn off all LEDs except the currently selected one
     for i, led in enumerate(leds):
@@ -140,12 +130,11 @@ def update_leds():
         smooth_transition(img_surface, pos)
 
 def handle_swipe(start_pos, end_pos, screen_size):
-    global value  # Declare value as global within the function
+    global image_index
     global last_input_time
-
     start_x, start_y = start_pos
     end_x, end_y = end_pos
-    screen_width, screen_height = screen. get_size()
+    screen_width, screen_height = screen_size.get_size()
     
     # Scale up the normalized coordinates
     start_x *= screen_width
@@ -156,12 +145,10 @@ def handle_swipe(start_pos, end_pos, screen_size):
     dx = end_x - start_x
     if abs(dx) > 50:  # Swipe threshold
         if dx > 0:  # Swipe right
-            value = (value + 1) % len(gpio_config['leds'][value])
-            print("swipe right", value)
+            image_index += 1
         else:  # Swipe left
-            value = (value - 1) % len(gpio_config['leds'][value])
-            print("swipe left", value)
-        update_leds()
+            image_index -= 1
+        update_display()
         last_input_time = time.time()
 
 # # Initial LED update to turn on the first LED
