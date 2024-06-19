@@ -1,4 +1,7 @@
 {
+    "screens_directory": "screens",
+    "IDLE_TIMEOUT": 5,
+    "DEGREES_PER_SECTION": 30,
     "dt": 4,
     "clk": 2,
     "sw": 3,

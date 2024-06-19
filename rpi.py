@@ -5,39 +5,43 @@ import pygame
 from PIL import Image
 import json
 
-
-screens_directory = 'screens'
-IDLE_TIMEOUT = 5
-json_file_path = 'gpio_config.json'
+# Constants
 
 
 # Initialize pygame
-os.environ['DISPLAY'] = ':0'  # Set the DISPLAY environment variable
-os.environ['XDG_RUNTIME_DIR'] = '/run/user/1000'  # Set the XDG_RUNTIME_DIR environment variable
+os.environ['DISPLAY'] = ':0'
+os.environ['XDG_RUNTIME_DIR'] = '/run/user/1000'
 pygame.init()
 screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 pygame.display.set_caption('Slideshow')
 clock = pygame.time.Clock()
+pygame.mouse.set_visible(False)
 
+# Read configuration from JSON file
 def read_gpio_config(json_file_path):
     with open(json_file_path, 'r') as json_file:
-        config = json.load(json_file)
-    return config
+        return json.load(json_file)
 
+
+json_file_path = 'gpio_config.json'
 gpio_config = read_gpio_config(json_file_path)
 
+PULSES_PER_360 = 20
+screens_directory = gpio_config.get('screens_directory', 'screens')
+IDLE_TIMEOUT = gpio_config.get('IDLE_TIMEOUT', 5)
+DEGREES_PER_SECTION = gpio_config.get('DEGREES_PER_SECTION', 30)
+STEPS_PER_SECTION = int(round((PULSES_PER_360 / 360) * DEGREES_PER_SECTION))  # This will be approximately 2
 
-
-
-
-
+# Initialize components
 leds = [LED(pin) for pin in gpio_config['leds']]
 dt = Button(gpio_config['dt'], pull_up=True)
 clk = Button(gpio_config['clk'], pull_up=True)
 sw = Button(gpio_config['sw'], pull_up=True)
 
+# State variables
 value = 0
 previous_clk_state = clk.is_pressed
+encoder_position = 0  # Track the cumulative position of the encoder
 
 def display_image(pin):
     folder_path = os.path.join(screens_directory, str(pin))
@@ -100,23 +104,24 @@ def smooth_transition(new_image, pos):
         clock.tick(60)
 
 def rotary_changed():
-    global last_input_time
-    global previous_clk_state
-    global value
+    global value, previous_clk_state, encoder_position
 
     current_clk_state = clk.is_pressed
-    if current_clk_state != previous_clk_state:  # If the state has changed
-        if not current_clk_state:  # Falling edge detected
+    if current_clk_state != previous_clk_state:
+        if not current_clk_state:  # Falling edge of the CLK signal
             if dt.is_pressed:
-                value = (value + 1) % len(gpio_config['leds'])
-                print("clockwise", value)
+                encoder_position += 1
             else:
-                value = (value - 1) % len(gpio_config['leds'])
-                print("anti-clockwise", value)
-            update_leds()
+                encoder_position -= 1
+
+            # Check if the encoder has moved enough steps to reach the next section
+            if abs(encoder_position) >= STEPS_PER_SECTION:
+                increment = 1 if encoder_position > 0 else -1
+                value = (value + increment) % len(gpio_config['leds'])
+                encoder_position = 0  # Reset encoder position after updating
+                update_leds()
+        
         previous_clk_state = current_clk_state
-    
-        last_input_time = time.time()
 
     if not sw.is_pressed:
         # Handle switch press if needed
