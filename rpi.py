@@ -134,7 +134,7 @@ def handle_swipe(start_pos, end_pos, screen_size):
     global last_input_time
     start_x, start_y = start_pos
     end_x, end_y = end_pos
-    screen_width, screen_height = screen_size.get_size()
+    screen_width, screen_height = screen_size
     
     # Scale up the normalized coordinates
     start_x *= screen_width
