@@ -128,12 +128,6 @@ def update_leds():
             led.off()
         else:
             led.on()  # Ensure the correct LED is on
-    
-    # Now handle the currently selected LED
-    leds[value].on()
-    img_surface, pos = display_image(gpio_config['leds'][value])
-    if img_surface:
-        smooth_transition(img_surface, pos)
 
 def handle_swipe(start_pos, end_pos, screen_size):
     global image_index
