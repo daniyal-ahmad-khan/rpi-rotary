@@ -93,7 +93,7 @@ def smooth_transition(new_image, pos):
 
 
 def rotary_changed():
-    global value, previous_clk_state, encoder_position, image_index
+    global value, previous_clk_state, encoder_position, image_index, last_input_time
     current_clk_state = clk.is_pressed
     if current_clk_state != previous_clk_state:
         if not current_clk_state:
@@ -107,6 +107,7 @@ def rotary_changed():
                 encoder_position = 0
                 image_index = 0
                 update_display()
+                last_input_time = time.time()  # Update the last interaction time
         previous_clk_state = current_clk_state
 
 
@@ -114,14 +115,19 @@ def rotary_changed():
         # Handle switch press if needed
         pass
 def update_display():
+    global last_input_time
     img_surface, pos = display_image(gpio_config['leds'][value], image_index)
+    update_leds()  # Ensure this is called to update the LED states
     if img_surface:
         smooth_transition(img_surface, pos)
+    last_input_time = time.time()  # Reset the idle timer whenever the display updates
 def update_leds():
-    # First, turn off all LEDs except the currently selected one
+    # Turn off all LEDs except the currently selected one
     for i, led in enumerate(leds):
         if i != value:
             led.off()
+        else:
+            led.on()  # Ensure the correct LED is on
     
     # Now handle the currently selected LED
     leds[value].on()
