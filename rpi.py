@@ -81,7 +81,7 @@ def display_idle_image():
 
 def turn_on_all_leds():
     for led in leds:
-        led.on()
+        led.off()
 
 def smooth_transition(new_image, pos):
     for alpha in range(0, 256, 35):  # Increase step size to make the transition faster
@@ -125,9 +125,9 @@ def update_leds():
     # Turn off all LEDs except the currently selected one
     for i, led in enumerate(leds):
         if i != value:
-            led.off()
+            led.on()
         else:
-            led.on()  # Ensure the correct LED is on
+            led.off()  # Ensure the correct LED is on
 
 def handle_swipe(start_pos, end_pos, screen_size):
     global image_index
