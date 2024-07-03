@@ -22,6 +22,22 @@ def read_gpio_config(json_file_path):
 json_file_path = 'gpio_config.json'
 gpio_config = read_gpio_config(json_file_path)
 
+# Initialize analytics JSON file
+analytics_file_path = 'analytics.json'
+if not os.path.exists(analytics_file_path):
+    with open(analytics_file_path, 'w') as json_file:
+        json.dump({}, json_file)
+
+def read_analytics(json_file_path):
+    with open(json_file_path, 'r') as json_file:
+        return json.load(json_file)
+
+def write_analytics(json_file_path, data):
+    with open(json_file_path, 'w') as json_file:
+        json.dump(data, json_file)
+
+analytics_data = read_analytics(analytics_file_path)
+
 PULSES_PER_360 = 20
 screens_directory = gpio_config.get('screens_directory', 'screens')
 IDLE_TIMEOUT = gpio_config.get('IDLE_TIMEOUT', 5)
@@ -55,8 +71,14 @@ def display_image(pin, index):
         img_surface = pygame.image.fromstring(img.tobytes(), img.size, img.mode)
         x_pos = (screen_width - new_width) // 2
         y_pos = (screen_height - new_height) // 2
+
+        # Update analytics data
+        analytics_data[files[index % len(files)]] = analytics_data.get(files[index % len(files)], 0) + 1
+        write_analytics(analytics_file_path, analytics_data)
+
         return img_surface, (x_pos, y_pos)
     return None, (0, 0)
+
 def display_idle_image():
     idle_path = os.path.join(screens_directory, 'idle')
     for file in os.listdir(idle_path):
@@ -91,7 +113,6 @@ def smooth_transition(new_image, pos):
         pygame.display.update()
         clock.tick(60)
 
-
 def rotary_changed():
     global value, previous_clk_state, encoder_position, image_index, last_input_time
     current_clk_state = clk.is_pressed
@@ -110,10 +131,10 @@ def rotary_changed():
                 last_input_time = time.time()  # Update the last interaction time
         previous_clk_state = current_clk_state
 
-
     if not sw.is_pressed:
         # Handle switch press if needed
         pass
+
 def update_display():
     global last_input_time
     img_surface, pos = display_image(gpio_config['leds'][value], image_index)
@@ -121,6 +142,7 @@ def update_display():
     if img_surface:
         smooth_transition(img_surface, pos)
     last_input_time = time.time()  # Reset the idle timer whenever the display updates
+
 def update_leds():
     # Turn off all LEDs except the currently selected one
     for i, led in enumerate(leds):
@@ -150,9 +172,6 @@ def handle_swipe(start_pos, end_pos, screen_size):
             image_index -= 1
         update_display()
         last_input_time = time.time()
-
-# # Initial LED update to turn on the first LED
-# update_leds()
 
 swipe_start_pos = None
 display_idle_image()
